@@ -1,0 +1,140 @@
+version: '3.8'
+
+volumes:
+  metadata_data: {}
+  middle_var: {}
+  historical_var: {}
+  broker_var: {}
+  coordinator_var: {}
+  router_var: {}
+  druid_shared: {}
+
+services:
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: data_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOO_MY_ID: 1
+    ports:
+      - 22181:2181
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: data_kafka
+    depends_on:
+      - zookeeper
+    restart: unless-stopped
+    ports:
+      - 29092:29092
+      - 9092:9092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  postgres:
+    container_name: data_postgres
+    image: postgres:15-alpine
+    restart: unless-stopped
+    volumes:
+      - metadata_data:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      - POSTGRES_USER=druid
+      - POSTGRES_DB=druid
+
+  coordinator:
+    image: anhngd/druid:25.0.0
+    container_name: druid_coordinator
+    restart: unless-stopped
+    volumes:
+      - druid_shared:/opt/shared
+      - coordinator_var:/opt/druid/var
+    ports:
+      - "8081:8081"
+    command:
+      - coordinator
+    depends_on:
+      - zookeeper
+      - postgres
+    env_file:
+      - ./druid/environment
+
+  broker:
+    image: anhngd/druid:25.0.0
+    container_name: data_druid_broker
+    restart: unless-stopped
+    volumes:
+      - broker_var:/opt/druid/var
+    ports:
+      - "8082:8082"
+    command:
+      - broker
+    depends_on: 
+      - zookeeper
+      - postgres
+      - coordinator
+    env_file:
+       - ./druid/environment
+
+  historical:
+    image: anhngd/druid:25.0.0
+    container_name: data_druid_historical
+    restart: unless-stopped
+    volumes:
+      - druid_shared:/opt/shared
+      - historical_var:/opt/druid/var
+    ports:
+      - "8083:8083"
+    command:
+      - historical
+    depends_on: 
+      - zookeeper
+      - postgres
+      - coordinator
+    env_file:
+      - ./druid/environment
+
+  middlemanager:
+    image: anhngd/druid:25.0.0
+    container_name: data_druid_middlemanager
+    volumes:
+      - druid_shared:/opt/shared
+      - middle_var:/opt/druid/var
+    ports:
+      - "8091:8091"
+      - "8100-8105:8100-8105"
+    command:
+      - middleManager
+    depends_on: 
+      - zookeeper
+      - postgres
+      - coordinator
+    env_file:
+      - ./druid/environment
+  
+  router:
+    image: anhngd/druid:25.0.0
+    container_name: data_druid_router
+    restart: unless-stopped
+    volumes:
+      - router_var:/opt/druid/var
+    ports:
+      - "8888:8888"
+    command:
+      - router
+    depends_on: 
+      - zookeeper
+      - postgres
+      - coordinator
+    env_file:
+      - ./druid/environment

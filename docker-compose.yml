@@ -54,7 +54,7 @@ services:
 
   coordinator:
     image: anhngd/druid:25.0.0
-    container_name: druid_coordinator
+    container_name: data_druid_coordinator
     restart: unless-stopped
     volumes:
       - druid_shared:/opt/shared
